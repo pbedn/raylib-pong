@@ -1,10 +1,12 @@
+#include <math.h>
 #include <iso646.h>
+#include <stdbool.h>
 
 #include "raylib.h"
 #include "raymath.h"
 #include "resource_dir.h"
 
-#define DEV_MODE
+// #define DEV_MODE
 
 #define PADDLE_WIDTH 15
 #define PADDLE_HEIGHT 150
@@ -33,7 +35,8 @@ typedef enum {
     MAIN_MENU,
     PREGAME,
     GAME,
-    GAME_OVER
+    GAME_OVER,
+    EXIT_WINDOW
 } Scene;
 
 typedef struct {
@@ -41,7 +44,9 @@ typedef struct {
     int rightScore;
     bool isPaused;
     Scene currentScene;
+    Scene prevScene;
     Sounds sounds;
+    bool aiPlayer;
 } GameState;
 
 const int screenWidth = 1280;
@@ -59,9 +64,6 @@ void ResetBall(Ball *ball) {
     ball->position = (Vector2){(int)(screenWidth / 2),(int)( screenHeight / 2)};
     ball->direction.x = (GetRandomValue(0, 1) == 0) ? 1.0f : -1.0f; // Randomize initial direction
     ball->direction.y = (GetRandomValue(-1, 1) < 0) ? 1.0f : -1.0f; // Randomize initial vertical direction
-    float length = sqrt(ball->direction.x * ball->direction.x + ball->direction.y * ball->direction.y);
-    ball->direction.x /= length;
-    ball->direction.y /= length;
     ball->speed = BALL_SPEED;
 }
 
@@ -83,8 +85,13 @@ int main(void) {
         .rightScore = 0,
         .isPaused = false,
         .currentScene = MAIN_MENU,
+        .prevScene = 0,
         .sounds = {.top = sn_beep, .edge = sn_peep, .hit = sn_plop},
+        .aiPlayer = true,
     };
+
+    SetExitKey(KEY_NULL);
+    bool exitWindow = false;    // Flag to set window to exit
 
 #ifdef DEV_MODE
     state.currentScene = PREGAME;
@@ -94,26 +101,38 @@ int main(void) {
     Paddle rightPaddle = {{screenWidth - 50 - PADDLE_WIDTH, (int)((screenHeight / 2)) - (PADDLE_HEIGHT / 2), PADDLE_WIDTH, PADDLE_HEIGHT}, 500.0f};
     Ball ball = {(Vector2){(int)(screenWidth / 2),(int)( screenHeight / 2)}, (Vector2){1.0f, 1.0f}, BALL_SPEED}; // Direction normalized
 
-    // Normalize the direction vector
-    float length = sqrt(ball.direction.x * ball.direction.x + ball.direction.y * ball.direction.y);
-    ball.direction.x /= length;
-    ball.direction.y /= length;
-
     ResetBall(&ball); // Initial reset
-    while (!WindowShouldClose()) {
+
+    while (!exitWindow) {
+        if (WindowShouldClose() || IsKeyPressed(KEY_ESCAPE)) {
+            state.prevScene = state.currentScene;
+            state.currentScene = EXIT_WINDOW;
+        }
+
+        if (state.currentScene == EXIT_WINDOW) {
+            if (IsKeyPressed(KEY_Y)) exitWindow = true;
+            else if (IsKeyPressed(KEY_N)) state.currentScene = state.prevScene;
+        }
+
         switch (state.currentScene) {
             case MAIN_MENU:
-                if (IsKeyPressed(KEY_ONE)) {
+                if (IsKeyPressed(KEY_ENTER)) {
+                    state.currentScene = PREGAME;
+
+                    state.aiPlayer = true;
+                }
+                else if (IsKeyPressed(KEY_SPACE)) {
                     state.currentScene = GAME;
+                    state.aiPlayer = false;
                 }
-                else if (IsKeyPressed(KEY_TWO)) {
-                }
-                else if (IsKeyPressed(KEY_THREE)) {
+                else if (IsKeyPressed(KEY_ESCAPE)) {
                     CloseWindow();
                 }
                 break;
             case PREGAME:
-                if (IsKeyPressed(KEY_SPACE) or IsKeyPressed(KEY_ENTER))
+                if (IsKeyPressed(KEY_SPACE) or IsKeyPressed(KEY_ENTER)
+                    or IsKeyPressed(KEY_W) or IsKeyPressed(KEY_UP)
+                    or IsKeyPressed(KEY_S) or IsKeyPressed(KEY_DOWN))
                     state.currentScene = GAME;
                 break;
             case GAME:
@@ -140,12 +159,22 @@ int main(void) {
 
         BeginDrawing();
         switch (state.currentScene) {
+            case EXIT_WINDOW:
+                ClearBackground(DARKGRAY);
+                char * exit_str = "Are you sure you want to exit program? [Y/N]";
+                DrawText(exit_str, GetScreenWidth() / 2 - MeasureText(exit_str, 30) / 2, GetScreenHeight() / 2, 30, RAYWHITE);
+                break;
             case MAIN_MENU:
                 ClearBackground(DARKGRAY);
-                DrawText("Main Menu", GetScreenWidth() / 2 - MeasureText("Main Menu", 40) / 2, GetScreenHeight() / 2 - 80, 40, RAYWHITE);
-                DrawText("1. Play Game", GetScreenWidth() / 2 - MeasureText("1. Play Game", 20) / 2, GetScreenHeight() / 2, 20, RAYWHITE);
-                DrawText("2. Settings", GetScreenWidth() / 2 - MeasureText("2. Settings", 20) / 2, GetScreenHeight() / 2 + 40, 20, RAYWHITE);
-                DrawText("3. Exit", GetScreenWidth() / 2 - MeasureText("3. Exit", 20) / 2, GetScreenHeight() / 2 + 80, 20, RAYWHITE);
+                Font defaultFont = GetFontDefault();
+                Vector2 origin = { 0, 0 };
+                float rotation = 0.0f; // No rotation
+                float fontSize = 40.0f; // Normal size
+                float spacing = 2.0f;
+                DrawTextPro(defaultFont, "PONG!", (Vector2){GetScreenWidth() / 2 - MeasureText("PONG!", fontSize) / 2, GetScreenHeight() / 2 - 80}, origin, rotation, fontSize, spacing, RAYWHITE);
+                DrawTextPro(defaultFont, "Play with AI (press Enter)", (Vector2){GetScreenWidth() / 2 - MeasureText("Play with AI (press 1)", 20) / 2, GetScreenHeight() / 2}, origin, rotation, 20, spacing, RAYWHITE);
+                DrawTextPro(defaultFont, "Local Two Player (press Space)", (Vector2){GetScreenWidth() / 2 - MeasureText("Play with AI (press 1)", 20) / 2, GetScreenHeight() / 2 + 40}, origin, rotation, 20, spacing, RAYWHITE);
+                DrawTextPro(defaultFont, "Exit (Press Escape)", (Vector2){GetScreenWidth() / 2 - MeasureText("Play with AI (press 1)", 20) / 2, GetScreenHeight() / 2 + 80}, origin, rotation, 20, spacing, RAYWHITE);
                 break;
             case PREGAME:
                 ClearBackground(DARKGRAY);
@@ -197,18 +226,69 @@ int main(void) {
 }
 
 void GameLogic(Paddle *leftPaddle, Paddle *rightPaddle, Ball *ball, GameState *state) {
-    // Input
-    if (IsKeyDown(KEY_W) && leftPaddle->rect.y > 0) {
-        leftPaddle->rect.y -= leftPaddle->speed * GetFrameTime();
-    }
-    if (IsKeyDown(KEY_S) && leftPaddle->rect.y < screenHeight - PADDLE_HEIGHT) {
-        leftPaddle->rect.y += leftPaddle->speed * GetFrameTime();
-    }
-    if (IsKeyDown(KEY_UP) && rightPaddle->rect.y > 0) {
-        rightPaddle->rect.y -= rightPaddle->speed * GetFrameTime();
-    }
-    if (IsKeyDown(KEY_DOWN) && rightPaddle->rect.y < screenHeight - PADDLE_HEIGHT) {
-        rightPaddle->rect.y += rightPaddle->speed * GetFrameTime();
+    if (state->aiPlayer) {
+        if(ball->direction.x > 0) {
+        // If the ball is moving away from the left paddle
+        // Move the paddle slowly towards the center of the screen
+        float centerY = (screenHeight - leftPaddle->rect.height) / 2;
+        float distanceToCenter = centerY - (leftPaddle->rect.y + leftPaddle->rect.height / 2);
+
+        if (fabs(distanceToCenter) > 10.0f) { // Only move if the distance is significant
+            if (distanceToCenter > 0) {
+                leftPaddle->rect.y += (leftPaddle->speed) * GetFrameTime(); // Move down slowly
+            } else {
+                leftPaddle->rect.y -= (leftPaddle->speed) * GetFrameTime(); // Move up slowly
+            }
+        }
+        else {
+            leftPaddle = leftPaddle;
+        }
+        } else {
+
+            // Calculate the target position based on the ball's position
+            float targetY = ball->position.y;
+
+            // Calculate the distance to the target position
+            float distance = targetY - (leftPaddle->rect.y + leftPaddle->rect.height / 2);
+
+            // Move the paddle towards the ball's position
+            if (fabs(distance) > 1.0f) { // Only move if the distance is significant
+                if (distance > 0) {
+                    leftPaddle->rect.y += leftPaddle->speed * GetFrameTime(); // Move down
+                } else {
+                    leftPaddle->rect.y -= leftPaddle->speed * GetFrameTime(); // Move up
+                }
+            }
+
+            // Clamp the paddle's position to stay within the game boundaries
+            if (leftPaddle->rect.y < 0) {
+                leftPaddle->rect.y = 0;
+            } else if (leftPaddle->rect.y > screenWidth - leftPaddle->rect.height) {
+                leftPaddle->rect.y = screenHeight - leftPaddle->rect.height;
+            }
+        }
+
+        // Extended Player Input
+        if ((IsKeyDown(KEY_W) || IsKeyDown(KEY_UP)) && rightPaddle->rect.y > 0) {
+            rightPaddle->rect.y -= rightPaddle->speed * GetFrameTime();
+        }
+        if ((IsKeyDown(KEY_S) || IsKeyDown(KEY_DOWN)) && rightPaddle->rect.y < screenHeight - PADDLE_HEIGHT) {
+            rightPaddle->rect.y += rightPaddle->speed * GetFrameTime();
+        }
+    } else {
+        // Two PlayerInput
+        if (IsKeyDown(KEY_W) && leftPaddle->rect.y > 0) {
+            leftPaddle->rect.y -= leftPaddle->speed * GetFrameTime();
+        }
+        if (IsKeyDown(KEY_S) && leftPaddle->rect.y < screenHeight - PADDLE_HEIGHT) {
+            leftPaddle->rect.y += leftPaddle->speed * GetFrameTime();
+        }
+        if (IsKeyDown(KEY_UP) && rightPaddle->rect.y > 0) {
+            rightPaddle->rect.y -= rightPaddle->speed * GetFrameTime();
+        }
+        if (IsKeyDown(KEY_DOWN) && rightPaddle->rect.y < screenHeight - PADDLE_HEIGHT) {
+            rightPaddle->rect.y += rightPaddle->speed * GetFrameTime();
+        }
     }
 
     // Update ball position
@@ -243,6 +323,8 @@ void GameLogic(Paddle *leftPaddle, Paddle *rightPaddle, Ball *ball, GameState *s
 
     if (state->leftScore == WIN_SCORE or state->rightScore == WIN_SCORE)
         state->currentScene = GAME_OVER;
+
+    // TraceLog(LOG_DEBUG, "After Update: x: %f, y: %f", ball->direction.x, ball->direction.y);
 }
 
 void DrawDashedLine(Color color) {
